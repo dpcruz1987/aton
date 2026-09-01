@@ -26,13 +26,15 @@ O endpoint `/mcp` implementa MCP Streamable HTTP e expõe uma ferramenta somente
 leitura para cada chave de `ATON_READ_OPERATIONS`. Configure o cliente para enviar
 `Authorization: Bearer <ATON_CONNECTOR_TOKEN>`.
 
-Exemplo de configuração local do Codex:
+Endpoint de produção:
 
 ```toml
 [mcp_servers.aton]
-url = "https://SEU-PROJETO.vercel.app/mcp"
+url = "https://aton-innovex-readonly.vercel.app/mcp"
 bearer_token_env_var = "ATON_CONNECTOR_TOKEN"
 ```
+
+Cada atualização da branch `main` é publicada automaticamente pela integração GitHub–Vercel.
 
 Antes de conectar, confirme `configured: true` em `GET /health`. O endpoint de
 saúde não retorna tokens nem caminhos internos.
