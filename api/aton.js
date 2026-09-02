@@ -99,18 +99,24 @@ async function queryAton(operation, params = {}) {
 
   const upstreamUrl = new URL(path, `${process.env.ATON_BASE_URL.replace(/\/$/, "")}/`);
   const allowedParameters = configuredParameters()[operation] || [];
+  const upstreamBody = {};
   if (params && typeof params === "object") {
     for (const [key, value] of Object.entries(params)) {
       if (allowedParameters.includes(key) && ["string", "number", "boolean"].includes(typeof value)) {
-        upstreamUrl.searchParams.set(key, String(value));
+        upstreamBody[key] = value;
       }
     }
   }
 
   try {
     const upstream = await fetch(upstreamUrl, {
-      method: "GET",
-      headers: { Accept: "application/json", ...upstreamAuthHeaders() },
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...upstreamAuthHeaders(),
+      },
+      body: JSON.stringify(upstreamBody),
       redirect: "error",
       signal: AbortSignal.timeout(25000),
     });

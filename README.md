@@ -4,7 +4,7 @@ Função Vercel que permite apenas operações de consulta previamente autorizad
 
 ## Segurança
 
-- O upstream sempre recebe `GET`; métodos de escrita são rejeitados.
+- O upstream recebe `POST` apenas para as consultas documentadas; métodos de escrita são rejeitados.
 - Não existe proxy de caminho livre.
 - Token e URL são variáveis protegidas da Vercel.
 - A lista `ATON_READ_OPERATIONS` mapeia nomes públicos para caminhos internos.

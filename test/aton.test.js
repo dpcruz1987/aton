@@ -59,3 +59,27 @@ test('lists allowlisted operations as read-only MCP tools', async () => {
   assert.equal(res.body.result.tools[0].annotations.readOnlyHint, true);
 });
 
+test('sends allowlisted read parameters as a POST JSON body upstream', async () => {
+  const originalFetch = global.fetch;
+  let captured;
+  global.fetch = async (url, options) => {
+    captured = { url: String(url), options };
+    return new Response(JSON.stringify({ ok: true }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    });
+  };
+
+  try {
+    const res = response();
+    await handler(request({ operation: 'produto', params: { codigo: '001', ean: '789', ignored: 'x' } }), res);
+    assert.equal(res.statusCode, 200);
+    assert.equal(captured.options.method, 'POST');
+    assert.equal(captured.options.headers['Content-Type'], 'application/json');
+    assert.deepEqual(JSON.parse(captured.options.body), { codigo: '001', ean: '789' });
+    assert.equal(new URL(captured.url).search, '');
+  } finally {
+    global.fetch = originalFetch;
+  }
+});
+
