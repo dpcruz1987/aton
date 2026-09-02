@@ -1,12 +1,13 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "api/aton.js": {
-      "maxDuration": 30
-    }
+    "api/aton.js": { "maxDuration": 30 },
+    "api/global-aton.js": { "maxDuration": 30 }
   },
   "rewrites": [
     { "source": "/health", "destination": "/api/aton?operation=health" },
-    { "source": "/mcp", "destination": "/api/aton" }
+    { "source": "/mcp", "destination": "/api/aton" },
+    { "source": "/health-global", "destination": "/api/global-aton?operation=health" },
+    { "source": "/mcp-global", "destination": "/api/global-aton" }
   ]
 }
