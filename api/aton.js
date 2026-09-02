@@ -59,7 +59,7 @@ export function configuredParameters() {
 
 function upstreamAuthHeaders() {
   const header = process.env.ATON_TOKEN_HEADER || "Authorization";
-  // O contrato público do ATON exige o token puro no Authorization.\n  const prefix = process.env.ATON_TOKEN_PREFIX ?? "";
+  const prefix = process.env.ATON_TOKEN_PREFIX ?? "";
   return { [header]: `${prefix}${process.env.ATON_TOKEN}` };
 }
 
@@ -78,6 +78,14 @@ function requestPayload(req) {
 function tokenFingerprint() {
   if (!process.env.ATON_TOKEN) return null;
   return createHash("sha256").update(process.env.ATON_TOKEN).digest("hex").slice(0, 16);
+}
+
+function upstreamHost() {
+  try {
+    return new URL(process.env.ATON_BASE_URL).host;
+  } catch {
+    return null;
+  }
 }
 
 function canonicalSignedRead(payload) {
@@ -130,6 +138,7 @@ function healthPayload() {
       process.env.ATON_CONNECTOR_TOKEN &&
       Object.keys(operations).length
     ),
+    upstream_host: upstreamHost(),
     token_fingerprint: tokenFingerprint(),
     signed_reads: true,
     signed_read_ttl_seconds: SIGNED_READ_TTL_MS / 1000,
