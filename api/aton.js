@@ -1,3 +1,5 @@
+import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
   "cache-control": "no-store",
@@ -9,6 +11,7 @@ const JSON_HEADERS = {
 
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const METHODS = new Set(["GET", "POST", "OPTIONS"]);
+const SIGNED_READ_TTL_MS = 5 * 60 * 1000;
 
 function setHeaders(res) {
   for (const [key, value] of Object.entries(JSON_HEADERS)) res.setHeader(key, value);
@@ -72,12 +75,54 @@ function requestPayload(req) {
   return typeof req.body === "object" && req.body ? req.body : {};
 }
 
+function tokenFingerprint() {
+  if (!process.env.ATON_TOKEN) return null;
+  return createHash("sha256").update(process.env.ATON_TOKEN).digest("hex").slice(0, 16);
+}
+
+function canonicalSignedRead(payload) {
+  const operation = String(payload.operation || "");
+  const ts = String(payload.ts || "");
+  const allowed = configuredParameters()[operation] || [];
+  const entries = [];
+  for (const name of allowed) {
+    if (payload[name] !== undefined && payload[name] !== null) {
+      entries.push([name, String(payload[name])]);
+    }
+  }
+  entries.sort(([a], [b]) => a.localeCompare(b));
+  return [operation, ts, ...entries.map(([k, v]) => `${k}=${v}`)].join("\n");
+}
+
+function verifySignedRead(payload) {
+  const token = process.env.ATON_TOKEN;
+  const signature = String(payload.sig || "");
+  const ts = Number(payload.ts);
+  if (!token || !signature || !Number.isFinite(ts)) return false;
+  if (Math.abs(Date.now() - ts) > SIGNED_READ_TTL_MS) return false;
+
+  const canonical = canonicalSignedRead(payload);
+  const expected = createHmac("sha256", token).update(canonical).digest("hex");
+  if (expected.length !== signature.length) return false;
+  return timingSafeEqual(Buffer.from(expected, "utf8"), Buffer.from(signature, "utf8"));
+}
+
+function signedReadParams(payload) {
+  const operation = String(payload.operation || "");
+  const allowed = configuredParameters()[operation] || [];
+  return Object.fromEntries(
+    allowed
+      .filter((name) => payload[name] !== undefined && payload[name] !== null)
+      .map((name) => [name, payload[name]])
+  );
+}
+
 function healthPayload() {
   const operations = configuredOperations();
   const parameters = configuredParameters();
   return {
     ok: true,
-    service: "aton-innovex-readonly",
+    service: "aton-readonly",
     mcp: true,
     configured: Boolean(
       process.env.ATON_BASE_URL &&
@@ -85,6 +130,9 @@ function healthPayload() {
       process.env.ATON_CONNECTOR_TOKEN &&
       Object.keys(operations).length
     ),
+    token_fingerprint: tokenFingerprint(),
+    signed_reads: true,
+    signed_read_ttl_seconds: SIGNED_READ_TTL_MS / 1000,
     operations: Object.keys(operations),
     parameters,
   };
@@ -135,13 +183,13 @@ function mcpTools() {
   return Object.keys(configuredOperations()).map((name) => ({
     name,
     title: `Consultar ATON: ${name}`,
-    description: `Executa a consulta somente leitura “${name}” no ATON Innovex.`,
+    description: `Use esta ferramenta para executar a consulta somente leitura “${name}” no ATON.`,
     inputSchema: {
       type: "object",
       properties: {
         params: {
           type: "object",
-          description: "Parâmetros de consulta enviados como query string ao ATON.",
+          description: "Parâmetros da consulta enviados ao ATON.",
           properties: Object.fromEntries(
             (parameters[name] || []).map((parameter) => [
               parameter,
@@ -164,7 +212,7 @@ async function handleMcp(payload) {
       return rpcResult(id, {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "aton-innovex-readonly", version: "2.0.0" },
+        serverInfo: { name: "aton-readonly", version: "2.1.0" },
       });
     case "notifications/initialized":
       return null;
@@ -199,6 +247,13 @@ export default async function handler(req, res) {
   const payload = requestPayload(req);
   if (String(payload.operation || "") === "health") return reply(res, 200, healthPayload());
 
+  if (req.method === "GET" && payload.sig && payload.ts) {
+    if (!verifySignedRead(payload)) return reply(res, 401, { error: "invalid_or_expired_signature" });
+    const operation = String(payload.operation || "");
+    const result = await queryAton(operation, signedReadParams(payload));
+    return reply(res, result.status, result.data);
+  }
+
   if (!process.env.ATON_CONNECTOR_TOKEN) {
     return reply(res, 503, { error: "connector_auth_not_configured" });
   }
@@ -217,4 +272,3 @@ export default async function handler(req, res) {
   const result = await queryAton(operation, payload.params);
   return reply(res, result.status, result.data);
 }
-
