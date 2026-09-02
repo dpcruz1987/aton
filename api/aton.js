@@ -59,7 +59,7 @@ export function configuredParameters() {
 
 function upstreamAuthHeaders() {
   const header = process.env.ATON_TOKEN_HEADER || "Authorization";
-  const prefix = process.env.ATON_TOKEN_PREFIX ?? "Bearer ";
+  // O contrato público do ATON exige o token puro no Authorization.\n  const prefix = process.env.ATON_TOKEN_PREFIX ?? "";
   return { [header]: `${prefix}${process.env.ATON_TOKEN}` };
 }
 

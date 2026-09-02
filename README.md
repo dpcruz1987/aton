@@ -18,7 +18,7 @@ Função Vercel que permite apenas operações de consulta previamente autorizad
 - `ATON_READ_PARAMETERS` (JSON: `{ "produto": ["codigo", "ean"] }`)
 - `ATON_CONNECTOR_TOKEN` (segredo usado pelo Codex para acessar o conector)
 - `ATON_TOKEN_HEADER` (opcional; padrão `Authorization`)
-- `ATON_TOKEN_PREFIX` (opcional; padrão `Bearer `)
+- `ATON_TOKEN_PREFIX` (opcional; padrão vazio, conforme o contrato do ATON)
 
 ## Conectar ao Codex
 

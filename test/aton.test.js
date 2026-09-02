@@ -23,7 +23,7 @@ test.beforeEach(() => {
   process.env.ATON_BASE_URL = 'https://aton.example/';
   process.env.ATON_TOKEN = 'upstream-secret';
   process.env.ATON_READ_OPERATIONS = JSON.stringify({ produto: '/produtos/consulta' });
-  process.env.ATON_READ_PARAMETERS = JSON.stringify({ produto: ['codigo', 'ean'] });
+  process.env.ATON_READ_PARAMETERS = JSON.stringify({ produto: ['codigo', 'ean'] });\n  delete process.env.ATON_TOKEN_HEADER;\n  delete process.env.ATON_TOKEN_PREFIX;
 });
 
 test('filters unsafe configured paths', () => {
@@ -75,7 +75,7 @@ test('sends allowlisted read parameters as a POST JSON body upstream', async () 
     await handler(request({ operation: 'produto', params: { codigo: '001', ean: '789', ignored: 'x' } }), res);
     assert.equal(res.statusCode, 200);
     assert.equal(captured.options.method, 'POST');
-    assert.equal(captured.options.headers['Content-Type'], 'application/json');
+    assert.equal(captured.options.headers['Content-Type'], 'application/json');\n    assert.equal(captured.options.headers.Authorization, 'upstream-secret');
     assert.deepEqual(JSON.parse(captured.options.body), { codigo: '001', ean: '789' });
     assert.equal(new URL(captured.url).search, '');
   } finally {
