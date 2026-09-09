@@ -1,4 +1,5 @@
 import { createHash, createHmac, timingSafeEqual } from "node:crypto";
+import { createRemoteJWKSet, jwtVerify } from "jose";
 
 const JSON_HEADERS = {
   "content-type": "application/json; charset=utf-8",
@@ -12,6 +13,10 @@ const JSON_HEADERS = {
 const MCP_PROTOCOL_VERSION = "2025-06-18";
 const METHODS = new Set(["GET", "POST", "OPTIONS"]);
 const SIGNED_READ_TTL_MS = 5 * 60 * 1000;
+const VERCEL_OIDC_ISSUER = "https://oidc.vercel.com/bestshoplojaonline-3453s-projects";
+const VERCEL_OIDC_AUDIENCE = "https://vercel.com/bestshoplojaonline-3453s-projects";
+const VERCEL_OIDC_SUBJECT = "owner:bestshoplojaonline-3453s-projects:project:aton-innovex-readonly:environment:production";
+let oidcJwksPromise;
 
 function setHeaders(res) {
   for (const [key, value] of Object.entries(JSON_HEADERS)) res.setHeader(key, value);
@@ -70,6 +75,39 @@ function isAuthorized(req) {
   return header === `Bearer ${expected}`;
 }
 
+async function getOidcJwks() {
+  if (!oidcJwksPromise) {
+    oidcJwksPromise = (async () => {
+      const discovery = await fetch(`${VERCEL_OIDC_ISSUER}/.well-known/openid-configuration`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(10000),
+      });
+      if (!discovery.ok) throw new Error("oidc_discovery_failed");
+      const config = await discovery.json();
+      if (!config?.jwks_uri) throw new Error("oidc_jwks_missing");
+      return createRemoteJWKSet(new URL(config.jwks_uri));
+    })();
+  }
+  return oidcJwksPromise;
+}
+
+async function isVercelOidcAuthorized(req) {
+  const token = String(req.headers?.["x-vercel-oidc-token"] || "");
+  if (!token) return false;
+  try {
+    const jwks = await getOidcJwks();
+    const { payload } = await jwtVerify(token, jwks, {
+      issuer: VERCEL_OIDC_ISSUER,
+      audience: VERCEL_OIDC_AUDIENCE,
+    });
+    return payload.sub === VERCEL_OIDC_SUBJECT &&
+      payload.project === "aton-innovex-readonly" &&
+      payload.environment === "production";
+  } catch {
+    return false;
+  }
+}
+
 function requestPayload(req) {
   if (req.method === "GET") return req.query || {};
   return typeof req.body === "object" && req.body ? req.body : {};
@@ -115,7 +153,7 @@ function verifySignedRead(payload) {
   return timingSafeEqual(Buffer.from(expected, "utf8"), Buffer.from(signature, "utf8"));
 }
 
-function signedReadParams(payload) {
+function readParams(payload) {
   const operation = String(payload.operation || "");
   const allowed = configuredParameters()[operation] || [];
   return Object.fromEntries(
@@ -141,6 +179,7 @@ function healthPayload() {
     upstream_host: upstreamHost(),
     token_fingerprint: tokenFingerprint(),
     signed_reads: true,
+    vercel_oidc_reads: true,
     signed_read_ttl_seconds: SIGNED_READ_TTL_MS / 1000,
     operations: Object.keys(operations),
     parameters,
@@ -221,7 +260,7 @@ async function handleMcp(payload) {
       return rpcResult(id, {
         protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: { tools: { listChanged: false } },
-        serverInfo: { name: "aton-readonly", version: "2.1.0" },
+        serverInfo: { name: "aton-readonly", version: "2.2.0" },
       });
     case "notifications/initialized":
       return null;
@@ -256,10 +295,16 @@ export default async function handler(req, res) {
   const payload = requestPayload(req);
   if (String(payload.operation || "") === "health") return reply(res, 200, healthPayload());
 
+  if (req.method === "GET" && await isVercelOidcAuthorized(req)) {
+    const operation = String(payload.operation || "");
+    const result = await queryAton(operation, readParams(payload));
+    return reply(res, result.status, result.data);
+  }
+
   if (req.method === "GET" && payload.sig && payload.ts) {
     if (!verifySignedRead(payload)) return reply(res, 401, { error: "invalid_or_expired_signature" });
     const operation = String(payload.operation || "");
-    const result = await queryAton(operation, signedReadParams(payload));
+    const result = await queryAton(operation, readParams(payload));
     return reply(res, result.status, result.data);
   }
 
