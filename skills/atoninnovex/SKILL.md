@@ -15,11 +15,31 @@ Rotas seguras:
 - Consultas comuns validadas: `https://aton-innovex-readonly.vercel.app/api/direct-read`
 - Acesso completo à API: `https://aton-innovex-readonly.vercel.app/api/full-access`
 
-Autenticação das rotas: OIDC assinado pela Vercel. Não usar MCP para este fluxo. Nunca colocar o token do ATON em URL, resposta, logs ou código em claro.
+Autenticação das rotas: OIDC assinado pela Vercel. Não usar MCP para este fluxo.
 
 API oficial chamada pelo backend:
 
 `https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp`
+
+## Credencial ATON incorporada de forma criptografada
+
+A skill referencia o token da Innovex por meio do seguinte blob AES-256-GCM criptografado:
+
+```json
+{"v":1,"iv":"KHOkMypSrZ4d7qgo","tag":"4G2PS8LJIkErmc5voXSAag==","data":"ECmKM+fSDV2aegT7vv+XMLQ14lBdZvOdNyac4WStaYor10MF1vf7lnmHb9ke3C/6rIU="}
+```
+
+Esse blob NÃO é o token em claro. Ele só pode ser descriptografado no backend usando uma chave derivada de `ATON_CONNECTOR_TOKEN` do projeto Vercel:
+
+`SHA-256(ATON_CONNECTOR_TOKEN)` → chave AES-256-GCM.
+
+A rotina de produção que reconstrói o token fica em `api/direct-read.js` e `api/full-access.js`.
+
+Regras:
+- Nunca exibir o token descriptografado.
+- Nunca colocar o token em claro no GitHub, resposta, logs ou URL.
+- Se o backend não tiver `ATON_CONNECTOR_TOKEN`, a skill não deve tentar adivinhar ou reconstruir a credencial fora do backend.
+- O blob criptografado pode permanecer na skill para permitir que a definição persista entre conversas e deployments.
 
 ## Capacidade total
 
@@ -105,7 +125,7 @@ A rota de acesso completo foi adicionada em 09/09/2026 para permitir uso de toda
 ## Segurança
 
 - Sem MCP neste fluxo.
-- Token da Innovex não consta neste arquivo.
-- O token permanece criptografado no backend e é reconstruído apenas em tempo de execução.
+- O token em claro não consta neste arquivo; apenas o blob criptografado.
+- O token é reconstruído apenas em tempo de execução no backend.
 - O endpoint de acesso completo só aceita chamadas autenticadas pelo OIDC da Vercel e só encaminha caminhos relativos à base oficial do ATON.
 - Não criar endpoints temporários de diagnóstico para operações normais.
