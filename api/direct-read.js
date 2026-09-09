@@ -57,6 +57,9 @@ export default async function handler(req, res) {
   if (!path || !String(path).startsWith('/') || String(path).includes('..')) {
     return reply(res, 404, { error: 'operation_not_allowed' });
   }
+  if (q.inspect === 'path') {
+    return reply(res, 200, { operation, path, base: ATON_BASE });
+  }
   if (!process.env.ATON_TOKEN) return reply(res, 503, { error: 'aton_token_missing' });
 
   const allowed = parameters()[operation] || [];
