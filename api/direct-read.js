@@ -1,15 +1,15 @@
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 const ATON_BASE = 'https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp';
+const DIRECT_PATHS = {
+  products: '/produtos/listagemgeral',
+  product_search: '/produtos/listagemgeral',
+  product_stock: '/produtos/consultarestoque',
+};
 const ISSUER = 'https://oidc.vercel.com/bestshoplojaonline-3453s-projects';
 const AUDIENCE = 'https://vercel.com/bestshoplojaonline-3453s-projects';
 const SUBJECT = 'owner:bestshoplojaonline-3453s-projects:project:aton-innovex-readonly:environment:production';
 let jwksPromise;
-
-function operations() {
-  try { return JSON.parse(process.env.ATON_READ_OPERATIONS || '{}'); }
-  catch { return {}; }
-}
 
 function parameters() {
   try { return JSON.parse(process.env.ATON_READ_PARAMETERS || '{}'); }
@@ -53,13 +53,9 @@ export default async function handler(req, res) {
 
   const q = req.query || {};
   const operation = String(q.operation || '');
-  const path = operations()[operation];
-  if (!path || !String(path).startsWith('/') || String(path).includes('..')) {
-    return reply(res, 404, { error: 'operation_not_allowed' });
-  }
-  if (q.inspect === 'path') {
-    return reply(res, 200, { operation, path, base: ATON_BASE });
-  }
+  const path = DIRECT_PATHS[operation];
+  if (!path) return reply(res, 404, { error: 'operation_not_allowed' });
+  if (q.inspect === 'path') return reply(res, 200, { operation, path, base: ATON_BASE });
   if (!process.env.ATON_TOKEN) return reply(res, 503, { error: 'aton_token_missing' });
 
   const allowed = parameters()[operation] || [];
@@ -77,7 +73,7 @@ export default async function handler(req, res) {
   };
   if (process.env.ATON_INTEGRADOR) headers.Integrador = process.env.ATON_INTEGRADOR;
 
-  const upstreamUrl = new URL(path, `${ATON_BASE.replace(/\/$/, '')}/`);
+  const upstreamUrl = new URL(`${ATON_BASE.replace(/\/$/, '')}${path}`);
   try {
     const upstream = await fetch(upstreamUrl, {
       method: 'POST',
