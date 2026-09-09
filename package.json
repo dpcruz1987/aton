@@ -6,7 +6,6 @@
   "scripts": {"test": "node --test"},
   "engines": {"node": ">=20"},
   "dependencies": {
-    "jose": "^6.0.0",
-    "@vercel/blob": "^2.8.0"
+    "jose": "^6.0.0"
   }
 }
