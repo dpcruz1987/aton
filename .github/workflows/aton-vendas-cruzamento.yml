@@ -1,0 +1,59 @@
+name: Vendas por vendedor - cruzamento Aton
+
+on:
+  workflow_dispatch:
+    inputs:
+      data_inicial:
+        description: Data inicial (DD/MM/AAAA)
+        required: true
+        default: "01/09/2026"
+      data_final:
+        description: Data final (DD/MM/AAAA)
+        required: true
+        default: "10/09/2026"
+  push:
+    branches: [main]
+    paths:
+      - "scripts/aton-sales-by-seller-cross.mjs"
+      - ".github/workflows/aton-vendas-cruzamento.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  cruzar-vendas:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
+      ATON_BASE_URL: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
+      ATON_INTEGRADOR: ATONAPI
+      DATA_INICIAL: ${{ github.event.inputs.data_inicial || '01/09/2026' }}
+      DATA_FINAL: ${{ github.event.inputs.data_final || '10/09/2026' }}
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Validar segredo
+        shell: bash
+        run: |
+          if [ -z "$ATON_INNOVEX_TOKEN" ]; then
+            echo "::error::Secret ATON_INNOVEX_TOKEN não configurado"
+            exit 1
+          fi
+
+      - name: Cruzar pedidos, detalhes e contas a receber
+        run: node scripts/aton-sales-by-seller-cross.mjs
+
+      - name: Publicar resultado
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendas-por-vendedor-cruzamento
+          path: output-cross/
+          retention-days: 7
+          if-no-files-found: error
