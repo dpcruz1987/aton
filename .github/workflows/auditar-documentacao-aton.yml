@@ -1,0 +1,30 @@
+name: Auditoria completa da documentação Aton
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/audit-aton-postman.mjs"
+      - ".github/workflows/auditar-documentacao-aton.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  auditar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Percorrer coleção e exemplos
+        run: node scripts/audit-aton-postman.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: auditoria-documentacao-aton
+          path: output-docs/
+          retention-days: 7
+          if-no-files-found: error
