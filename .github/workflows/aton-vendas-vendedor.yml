@@ -1,0 +1,54 @@
+name: Vendas por vendedor - Innovex
+
+on:
+  workflow_dispatch:
+    inputs:
+      data_inicial:
+        description: Data inicial (DD/MM/AAAA)
+        required: true
+        default: '01/09/2026'
+      data_final:
+        description: Data final (DD/MM/AAAA)
+        required: true
+        default: '10/09/2026'
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/aton-vendas-vendedor.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  relatorio:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
+      ATON_INNOVEX_API_BASE: ${{ vars.ATON_INNOVEX_API_BASE }}
+      ATON_INNOVEX_INTEGRADOR: ${{ vars.ATON_INNOVEX_INTEGRADOR }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validar secret
+        shell: bash
+        run: |
+          if [ -z "$ATON_INNOVEX_TOKEN" ]; then
+            echo "::error::Secret ATON_INNOVEX_TOKEN não está configurado"
+            exit 1
+          fi
+
+      - name: Gerar relatório
+        shell: bash
+        env:
+          DATA_INICIAL: ${{ inputs.data_inicial || '01/09/2026' }}
+          DATA_FINAL: ${{ inputs.data_final || '10/09/2026' }}
+        run: node scripts/aton-sales-report.mjs "$DATA_INICIAL" "$DATA_FINAL"
+
+      - name: Publicar arquivos
+        uses: actions/upload-artifact@v4
+        with:
+          name: vendas-por-vendedor-innovex
+          path: output/
+          if-no-files-found: error
+          retention-days: 7
