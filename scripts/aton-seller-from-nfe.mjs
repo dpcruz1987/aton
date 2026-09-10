@@ -12,7 +12,7 @@ function get(o,n){for(const k of n)if(o?.[k]!==undefined&&o[k]!==null&&o[k]!==''
 function num(v){if(typeof v==='number')return v;if(typeof v!=='string')return 0;const s=v.includes(',')?v.replaceAll('.','').replace(',','.'):v.replace(/[^0-9.-]/g,'');const n=Number(s);return Number.isFinite(n)?n:0}
 function xmlValues(v,path='root',out=[]){if(Array.isArray(v))for(const x of v)xmlValues(x,path+'[]',out);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v)){if(k.toLowerCase()==='xml'&&typeof x==='string')out.push({path:path+'.'+k,xml:x});else xmlValues(x,path+'.'+k,out)}return out}
 function clean(s){return String(s||'').replace(/<!\[CDATA\[|\]\]>/g,'').replace(/&amp;/g,'&').replace(/&quot;/g,'"').trim()}
-function sellerName(s){return clean(s).replace(/\\s+NOSSO PEDIDO(?:.*)?$/i,'').trim()}
+function sellerName(s){return clean(s).replace(/\s+NOSSO PEDIDO(?:.*)?$/i,'').trim()}
 function sellerFields(xml){
  const out=[];let m;
  const obs=/<obsCont\b[^>]*xCampo=["']([^"']+)["'][^>]*>([\s\S]*?)<\/obsCont>/gi;
