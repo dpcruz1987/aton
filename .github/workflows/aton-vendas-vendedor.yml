@@ -15,6 +15,7 @@ on:
     branches: [main]
     paths:
       - '.github/workflows/aton-vendas-vendedor.yml'
+      - 'scripts/aton-sales-report.mjs'
 
 permissions:
   contents: read
