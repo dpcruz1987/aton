@@ -89,7 +89,7 @@ function sellerFromXml(xml) {
     if (seller) matches.push(seller);
   }
   if (!matches.length) {
-    const fallback = /(?:^|[>\s])VENDEDOR\s*[:=\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})/gi;
+    const fallback = /(?:vendedor|representante|consultor|atendente|comercial)\s*[:=\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})/gi;
     while ((match = fallback.exec(xml))) {
       const seller = normalizeSeller(cleanXmlText(match[1]).split(/[;<]/)[0]);
       if (seller) matches.push(seller);
