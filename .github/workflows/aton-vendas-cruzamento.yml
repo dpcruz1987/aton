@@ -26,8 +26,8 @@ jobs:
     timeout-minutes: 25
     env:
       ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
-      ATON_BASE_URL: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
-      ATON_INTEGRADOR: ATONAPI
+      ATON_INNOVEX_API_BASE: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
+      ATON_INNOVEX_INTEGRADOR: ATONAPI
       DATA_INICIAL: ${{ github.event.inputs.data_inicial || '01/09/2026' }}
       DATA_FINAL: ${{ github.event.inputs.data_final || '10/09/2026' }}
     steps:
@@ -48,7 +48,7 @@ jobs:
           fi
 
       - name: Cruzar pedidos, detalhes e contas a receber
-        run: node scripts/aton-sales-by-seller-cross.mjs
+        run: node scripts/aton-sales-by-seller-cross.mjs "$DATA_INICIAL" "$DATA_FINAL"
 
       - name: Publicar resultado
         uses: actions/upload-artifact@v4
