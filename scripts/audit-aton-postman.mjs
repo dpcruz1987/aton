@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 
-const URL='https://documenter.gw.postman.com/api/collections/12902127/VV4tUJaC?segregateAuth=true&versionTag=latest';
-const response=await fetch(URL,{redirect:'error',signal:AbortSignal.timeout(60000)});
+const COLLECTION_URL='https://documenter.gw.postman.com/api/collections/12902127/VV4tUJaC?segregateAuth=true&versionTag=latest';
+const response=await fetch(COLLECTION_URL,{redirect:'error',signal:AbortSignal.timeout(60000)});
 if(!response.ok) throw new Error('Postman HTTP '+response.status);
 const collection=await response.json();
 
