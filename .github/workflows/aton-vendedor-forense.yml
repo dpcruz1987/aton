@@ -1,0 +1,38 @@
+name: Investigação forense de vendedor no Aton
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/aton-seller-forensics.mjs"
+      - ".github/workflows/aton-vendedor-forense.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  investigar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
+      ATON_INNOVEX_API_BASE: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
+      ATON_INNOVEX_INTEGRADOR: ATONAPI
+      DATA_INICIAL: "01/09/2026"
+      DATA_FINAL: "10/09/2026"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Validar segredo
+        run: test -n "$ATON_INNOVEX_TOKEN"
+      - name: Cruzar pedido, nota, logística e financeiro
+        run: node scripts/aton-seller-forensics.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: investigacao-forense-vendedor-aton
+          path: output-forensic/
+          retention-days: 7
+          if-no-files-found: error
