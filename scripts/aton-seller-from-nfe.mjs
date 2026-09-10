@@ -1,35 +1,196 @@
-import fs from 'node:fs';
-const BASE=process.env.ATON_INNOVEX_API_BASE||'https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp';
-const TOKEN=process.env.ATON_INNOVEX_TOKEN;const INTEGRADOR=process.env.ATON_INNOVEX_INTEGRADOR||'ATONAPI';
-const START=process.env.DATA_INICIAL||'01/09/2026',END=process.env.DATA_FINAL||'10/09/2026';
-if(!TOKEN)throw new Error('ATON_INNOVEX_TOKEN ausente');
-const headers={Accept:'application/json','Content-Type':'application/json',Authorization:TOKEN,Integrador:INTEGRADOR};
-async function call(body){const r=await fetch(BASE+'/pedidosvenda/consulta',{method:'POST',headers,body:JSON.stringify(body),redirect:'error',signal:AbortSignal.timeout(30000)});const t=await r.text();if(!r.ok)throw new Error('HTTP '+r.status);return JSON.parse(t)}
-function arrays(v,out=[]){if(Array.isArray(v)){const rows=v.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));if(rows.length)out.push(rows);for(const x of v)arrays(x,out)}else if(v&&typeof v==='object')for(const x of Object.values(v))arrays(x,out);return out}
-function score(rows){const k=[...new Set(rows.slice(0,4).flatMap(Object.keys))];return(k.some(x=>/pedido/i.test(x))?8:0)+(k.some(x=>/total/i.test(x))?5:0)}
-function rows(p){const a=arrays(p);a.sort((x,y)=>score(y)-score(x)||y.length-x.length);return a[0]||[]}
-function get(o,n){for(const k of n)if(o?.[k]!==undefined&&o[k]!==null&&o[k]!=='')return o[k]}
-function num(v){if(typeof v==='number')return v;if(typeof v!=='string')return 0;const s=v.includes(',')?v.replaceAll('.','').replace(',','.'):v.replace(/[^0-9.-]/g,'');const n=Number(s);return Number.isFinite(n)?n:0}
-function xmlValues(v,path='root',out=[]){if(Array.isArray(v))for(const x of v)xmlValues(x,path+'[]',out);else if(v&&typeof v==='object')for(const[k,x]of Object.entries(v)){if(k.toLowerCase()==='xml'&&typeof x==='string')out.push({path:path+'.'+k,xml:x});else xmlValues(x,path+'.'+k,out)}return out}
-function clean(s){return String(s||'').replace(/<!\[CDATA\[|\]\]>/g,'').replace(/&amp;/g,'&').replace(/&quot;/g,'"').trim()}
-function sellerName(s){return clean(s).replace(/\s+NOSSO PEDIDO(?:.*)?$/i,'').trim()}
-function sellerFields(xml){
- const out=[];let m;
- const obs=/<obsCont\b[^>]*xCampo=["']([^"']+)["'][^>]*>([\s\S]*?)<\/obsCont>/gi;
- while((m=obs.exec(xml))){const label=clean(m[1]);if(/vend|represent|consult|atend|comercial/i.test(label)){const x=/<xTexto>([\s\S]*?)<\/xTexto>/i.exec(m[2]);if(x&&clean(x[1]))out.push({label,value:sellerName(x[1]),method:'obsCont'})}}
- const generic=/(?:vendedor|representante|consultor|atendente|comercial)\s*[:=\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})/gi;
- while((m=generic.exec(xml))){const value=sellerName(clean(m[1]).split(/[;<]/)[0]);if(value)out.push({label:m[0].slice(0,m[0].indexOf(m[1])).replace(/[:=\-\s]+$/,''),value,method:'texto'})}
- return out;
+import crypto from "node:crypto";
+import fs from "node:fs";
+
+const BASE = process.env.ATON_INNOVEX_API_BASE || "https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp";
+const TOKEN = process.env.ATON_INNOVEX_TOKEN;
+const INTEGRADOR = process.env.ATON_INNOVEX_INTEGRADOR || "ATONAPI";
+if (!TOKEN) throw new Error("ATON_INNOVEX_TOKEN ausente");
+
+const now = new Date();
+const recifeParts = Object.fromEntries(new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Recife", year: "numeric", month: "2-digit", day: "2-digit",
+}).formatToParts(now).filter((p) => p.type !== "literal").map((p) => [p.type, p.value]));
+const defaultStart = `01/${recifeParts.month}/${recifeParts.year}`;
+const defaultEnd = `${recifeParts.day}/${recifeParts.month}/${recifeParts.year}`;
+const START = process.env.DATA_INICIAL || defaultStart;
+const END = process.env.DATA_FINAL || defaultEnd;
+
+const headers = {
+  Accept: "application/json",
+  "Content-Type": "application/json",
+  Authorization: TOKEN,
+  Integrador: INTEGRADOR,
+};
+
+async function call(body) {
+  const response = await fetch(`${BASE}/pedidosvenda/consulta`, {
+    method: "POST", headers, body: JSON.stringify(body), redirect: "error",
+    signal: AbortSignal.timeout(30_000),
+  });
+  const text = await response.text();
+  if (!response.ok) throw new Error(`API respondeu HTTP ${response.status}`);
+  try { return JSON.parse(text); } catch { throw new Error("API retornou JSON inválido"); }
 }
-const orders=new Map();
-for(const posicao of ['EMITIDO','FECHADO'])for(let offset=1;offset<=200;offset++){const p=await call({tipo_data:'data_pedido',data_inicial:START,data_final:END,posicao,offset,limit:50});const rr=rows(p);for(const o of rr){const id=String(get(o,['pedido','numero_pedido','id','codigo','PEDIDO'])||'');if(id&&!orders.has(id))orders.set(id,o)}if(rr.length<50)break}
-const evidence=[];
-for(const[pedido,o]of orders){for(const x of xmlValues(o))for(const f of sellerFields(x.xml))evidence.push({pedido,label:f.label,vendedor:f.value,metodo:f.method,path:x.path,total:num(get(o,['total_pedido','valor_total','vlr_total','valor_pedido','total','VLR_TOTAL'])),data:String(get(o,['data_pedido','data','DATA_PEDIDO'])||'').slice(0,10)})}
-const perOrder=new Map();for(const e of evidence){const a=perOrder.get(e.pedido)||[];a.push(e);perOrder.set(e.pedido,a)}
-const conflicts=[...perOrder].filter(([,a])=>new Set(a.map(x=>x.vendedor.toLowerCase())).size>1).map(([pedido,a])=>({pedido,valores:[...new Set(a.map(x=>x.vendedor))]}));
-const ranking=new Map();for(const[pedido,a]of perOrder){const unique=[...new Map(a.map(x=>[x.vendedor.toLowerCase(),x])).values()];if(unique.length!==1)continue;const e=unique[0];const r=ranking.get(e.vendedor.toLowerCase())||{vendedor:e.vendedor,pedidos:0,faturamento:0};r.pedidos++;r.faturamento+=e.total;ranking.set(e.vendedor.toLowerCase(),r)}
-const dailyMap=new Map();for(const[pedido,a]of perOrder){const unique=[...new Map(a.map(x=>[x.vendedor.toLowerCase(),x])).values()];if(unique.length!==1)continue;const e=unique[0];const key=e.data+'|'+e.vendedor;const d=dailyMap.get(key)||{data:e.data,vendedor:e.vendedor,pedidos:0,faturamento:0};d.pedidos++;d.faturamento+=e.total;dailyMap.set(key,d)}
-const daily=[...dailyMap.values()].sort((a,b)=>a.data.localeCompare(b.data)||a.vendedor.localeCompare(b.vendedor));
-const result={checked_at:new Date().toISOString(),periodo:{inicio:START,fim:END},total_pedidos:orders.size,pedidos_com_campo_vendedor:perOrder.size,pedidos_sem_campo_vendedor:orders.size-perOrder.size,conflitos:conflicts,ranking:[...ranking.values()].sort((a,b)=>b.faturamento-a.faturamento),diario:daily,evidencias:evidence.map(({total,...x})=>x)};
-fs.mkdirSync('output-nfe-seller',{recursive:true});fs.writeFileSync('output-nfe-seller/resultado.json',JSON.stringify(result,null,2));
-const brl=new Intl.NumberFormat('pt-BR',{style:'currency',currency:'BRL'});const md=['# Vendas por vendedor via XML da NF-e','','Período: '+START+' a '+END,'Cobertura: '+result.pedidos_com_campo_vendedor+' de '+result.total_pedidos+' pedidos','Conflitos: '+conflicts.length,'','| Vendedor | Pedidos | Faturamento | Ticket médio |','|---|---:|---:|---:|',...result.ranking.map(r=>'| '+r.vendedor.replaceAll('|','/')+' | '+r.pedidos+' | '+brl.format(r.faturamento)+' | '+brl.format(r.faturamento/r.pedidos)+' |')].join('\n');fs.writeFileSync('output-nfe-seller/resumo.md',md);if(process.env.GITHUB_STEP_SUMMARY)fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY,md);
+
+function arrays(value, output = []) {
+  if (Array.isArray(value)) {
+    const rows = value.filter((item) => item && typeof item === "object" && !Array.isArray(item));
+    if (rows.length) output.push(rows);
+    for (const item of value) arrays(item, output);
+  } else if (value && typeof value === "object") {
+    for (const item of Object.values(value)) arrays(item, output);
+  }
+  return output;
+}
+function score(rows) {
+  const keys = [...new Set(rows.slice(0, 4).flatMap(Object.keys))];
+  return (keys.some((key) => /pedido/i.test(key)) ? 8 : 0) + (keys.some((key) => /total/i.test(key)) ? 5 : 0);
+}
+function responseRows(payload) {
+  const candidates = arrays(payload);
+  candidates.sort((a, b) => score(b) - score(a) || b.length - a.length);
+  return candidates[0] || [];
+}
+function first(object, names) {
+  for (const name of names) if (object?.[name] !== undefined && object[name] !== null && object[name] !== "") return object[name];
+}
+function moneyToCents(value) {
+  if (typeof value === "number") return Math.round(value * 100);
+  if (typeof value !== "string") return 0;
+  const cleaned = value.includes(",") ? value.replaceAll(".", "").replace(",", ".") : value.replace(/[^0-9.-]/g, "");
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? Math.round(number * 100) : 0;
+}
+function findXml(value, output = []) {
+  if (Array.isArray(value)) for (const item of value) findXml(item, output);
+  else if (value && typeof value === "object") for (const [key, item] of Object.entries(value)) {
+    if (key.toLowerCase() === "xml" && typeof item === "string") output.push(item);
+    else findXml(item, output);
+  }
+  return output;
+}
+function cleanXmlText(value) {
+  return String(value || "").replace(/<!\[CDATA\[|\]\]>/g, "").replace(/&amp;/g, "&").replace(/&quot;/g, "\"").trim();
+}
+function normalizeSeller(value) {
+  return cleanXmlText(value).replace(/\s+NOSSO PEDIDO(?:.*)?$/i, "").replace(/\s+/g, " ").trim().toUpperCase();
+}
+function sellerFromXml(xml) {
+  const matches = [];
+  const regex = /<obsCont\b[^>]*xCampo=["']VENDEDOR["'][^>]*>([\s\S]*?)<\/obsCont>/gi;
+  let match;
+  while ((match = regex.exec(xml))) {
+    const textMatch = /<xTexto>([\s\S]*?)<\/xTexto>/i.exec(match[1]);
+    const seller = normalizeSeller(textMatch?.[1]);
+    if (seller) matches.push(seller);
+  }
+  return [...new Set(matches)];
+}
+function isoDate(value) {
+  const text = String(value || "").trim();
+  let match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  if (match) return `${match[1]}-${match[2]}-${match[3]}`;
+  match = /^(\d{2})\/(\d{2})\/(\d{4})/.exec(text);
+  if (match) return `${match[3]}-${match[2]}-${match[1]}`;
+  return text.slice(0, 10);
+}
+
+const orders = new Map();
+const positions = ["EMITIDO", "FECHADO"];
+for (const posicao of positions) {
+  for (let offset = 1; offset <= 10_000; offset++) {
+    const payload = await call({
+      tipo_data: "data_pedido", data_inicial: START, data_final: END,
+      posicao, offset, limit: 50,
+    });
+    const rows = responseRows(payload);
+    for (const order of rows) {
+      const number = String(first(order, ["pedido", "numero_pedido", "id", "codigo", "PEDIDO"]) || "").trim();
+      if (number && !orders.has(number)) orders.set(number, order);
+    }
+    if (rows.length < 50) break;
+    if (offset === 10_000) throw new Error("Limite de paginação excedido");
+  }
+}
+
+const acceptedOrders = [];
+let sellerMissing = 0;
+let sellerConflicts = 0;
+for (const [number, order] of orders) {
+  const sellers = [...new Set(findXml(order).flatMap(sellerFromXml))];
+  if (!sellers.length) { sellerMissing++; continue; }
+  if (sellers.length !== 1) { sellerConflicts++; continue; }
+  acceptedOrders.push({
+    number,
+    vendedor: sellers[0],
+    data: isoDate(first(order, ["data_pedido", "data", "DATA_PEDIDO"])),
+    faturamento_centavos: moneyToCents(first(order, ["total_pedido", "valor_total", "vlr_total", "valor_pedido", "total", "VLR_TOTAL"])),
+  });
+}
+
+const summary = new Map();
+const daily = new Map();
+for (const order of acceptedOrders) {
+  const tipo = order.vendedor === "MERCADO LIVRE" ? "Canal" : "Equipe";
+  const summaryRow = summary.get(order.vendedor) || { vendedor: order.vendedor, pedidos: 0, faturamento_centavos: 0, tipo };
+  summaryRow.pedidos++;
+  summaryRow.faturamento_centavos += order.faturamento_centavos;
+  summary.set(order.vendedor, summaryRow);
+  const key = `${order.data}|${order.vendedor}`;
+  const dailyRow = daily.get(key) || { data: order.data, vendedor: order.vendedor, pedidos: 0, faturamento_centavos: 0, tipo };
+  dailyRow.pedidos++;
+  dailyRow.faturamento_centavos += order.faturamento_centavos;
+  daily.set(key, dailyRow);
+}
+
+const seller_summary = [...summary.values()].map((row) => ({
+  vendedor: row.vendedor,
+  pedidos: row.pedidos,
+  faturamento: row.faturamento_centavos / 100,
+  ticket_medio: Math.round(row.faturamento_centavos / row.pedidos) / 100,
+  comissao_estimada: row.tipo === "Equipe" ? Math.round(row.faturamento_centavos * 0.01) / 100 : null,
+  tipo: row.tipo,
+})).sort((a, b) => a.vendedor.localeCompare(b.vendedor, "pt-BR"));
+const seller_daily = [...daily.values()].map((row) => ({
+  data: row.data,
+  vendedor: row.vendedor,
+  pedidos: row.pedidos,
+  faturamento: row.faturamento_centavos / 100,
+  tipo: row.tipo,
+})).sort((a, b) => a.data.localeCompare(b.data) || a.vendedor.localeCompare(b.vendedor, "pt-BR"));
+
+const canonical = { seller_summary, seller_daily };
+const signature = crypto.createHash("sha256").update(JSON.stringify(canonical)).digest("hex");
+const syncedAt = new Intl.DateTimeFormat("sv-SE", {
+  timeZone: "America/Recife", year: "numeric", month: "2-digit", day: "2-digit",
+  hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: false,
+}).format(now).replace(" ", "T") + "-03:00";
+const result = {
+  schema_version: 1,
+  signature,
+  synced_at: syncedAt,
+  timezone: "America/Recife",
+  periodo: { inicio: START, fim: END },
+  positions,
+  quality: {
+    total_pedidos_unicos: orders.size,
+    pedidos_agregados: acceptedOrders.length,
+    pedidos_sem_vendedor: sellerMissing,
+    pedidos_com_conflito: sellerConflicts,
+  },
+  canonical,
+};
+
+fs.mkdirSync("output-nfe-seller", { recursive: true });
+fs.writeFileSync("output-nfe-seller/payload-canonico.json", JSON.stringify(result, null, 2));
+const total = seller_summary.reduce((sum, row) => sum + row.faturamento, 0);
+const markdown = [
+  "# Sincronização de vendas por vendedor", "",
+  `Período: ${START} a ${END}`,
+  `Pedidos únicos: ${orders.size}`,
+  `Pedidos agregados: ${acceptedOrders.length}`,
+  `Assinatura: ${signature}`,
+  `Faturamento agregado: ${new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" }).format(total)}`,
+].join("\n");
+fs.writeFileSync("output-nfe-seller/resumo.md", markdown);
+if (process.env.GITHUB_STEP_SUMMARY) fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
