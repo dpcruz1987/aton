@@ -1,0 +1,37 @@
+name: Vendas por vendedor via XML da NF-e
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - "scripts/aton-seller-from-nfe.mjs"
+      - ".github/workflows/aton-vendedor-nfe.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  apurar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
+      ATON_INNOVEX_API_BASE: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
+      ATON_INNOVEX_INTEGRADOR: ATONAPI
+      DATA_INICIAL: "01/09/2026"
+      DATA_FINAL: "10/09/2026"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: test -n "$ATON_INNOVEX_TOKEN"
+      - name: Extrair vendedor identificado no XML
+        run: node scripts/aton-seller-from-nfe.mjs
+      - uses: actions/upload-artifact@v4
+        with:
+          name: vendas-vendedor-xml-nfe
+          path: output-nfe-seller/
+          retention-days: 7
+          if-no-files-found: error
