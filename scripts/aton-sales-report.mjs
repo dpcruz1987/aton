@@ -9,7 +9,7 @@ if (![start,end].every(v=>typeof v==='string'&&v.length===10&&v[2]==='/'&&v[5]==
 
 const get=(o,names)=>{for(const n of names)if(o&&o[n]!==undefined&&o[n]!==null&&o[n]!=='')return o[n];};
 const txt=v=>typeof v==='string'?v.trim():'';
-const num=v=>{if(typeof v==='number')return Number.isFinite(v)?v:0;if(typeof v!=='string')return 0;const s=v.trim().split('R
+const num=v=>{if(typeof v==='number')return Number.isFinite(v)?v:0;if(typeof v!=='string')return 0;let s='';for(const ch of v.trim()){if('0123456789,-.'.includes(ch))s+=ch;}const x=s.includes(',')?s.split('.').join('').replace(',','.'):s;const n=Number(x);return Number.isFinite(n)?n:0;};
 function collect(v,path,out){
   if(Array.isArray(v)){const rows=v.filter(x=>x&&typeof x==='object'&&!Array.isArray(x));if(rows.length)out.push({path,rows,keys:[...new Set(rows.slice(0,5).flatMap(Object.keys))]});v.forEach((x,i)=>collect(x,path+'['+i+']',out));}
   else if(v&&typeof v==='object')for(const [k,x] of Object.entries(v))collect(x,path+'.'+k,out);
