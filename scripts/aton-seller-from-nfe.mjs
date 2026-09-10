@@ -77,12 +77,23 @@ function normalizeSeller(value) {
 }
 function sellerFromXml(xml) {
   const matches = [];
-  const regex = /<obsCont\b[^>]*xCampo=["']VENDEDOR["'][^>]*>([\s\S]*?)<\/obsCont>/gi;
+  const regex = /<(?:[A-Za-z0-9_]+:)?obsCont\b([^>]*)>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?obsCont>/gi;
   let match;
   while ((match = regex.exec(xml))) {
-    const textMatch = /<xTexto>([\s\S]*?)<\/xTexto>/i.exec(match[1]);
+    const attribute = /xCampo\s*=\s*["']([^"']+)["']/i.exec(match[1])?.[1];
+    const child = /<(?:[A-Za-z0-9_]+:)?xCampo>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?xCampo>/i.exec(match[2])?.[1];
+    const label = cleanXmlText(attribute || child);
+    if (label.toUpperCase() !== "VENDEDOR") continue;
+    const textMatch = /<(?:[A-Za-z0-9_]+:)?xTexto>([\s\S]*?)<\/(?:[A-Za-z0-9_]+:)?xTexto>/i.exec(match[2]);
     const seller = normalizeSeller(textMatch?.[1]);
     if (seller) matches.push(seller);
+  }
+  if (!matches.length) {
+    const fallback = /(?:^|[>\s])VENDEDOR\s*[:=\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})/gi;
+    while ((match = fallback.exec(xml))) {
+      const seller = normalizeSeller(cleanXmlText(match[1]).split(/[;<]/)[0]);
+      if (seller) matches.push(seller);
+    }
   }
   return [...new Set(matches)];
 }
