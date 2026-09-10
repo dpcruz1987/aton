@@ -15,9 +15,9 @@ function clean(s){return String(s||'').replace(/<!\[CDATA\[|\]\]>/g,'').replace(
 function sellerFields(xml){
  const out=[];let m;
  const obs=/<obsCont\b[^>]*xCampo=["']([^"']+)["'][^>]*>([\s\S]*?)<\/obsCont>/gi;
- while((m=obs.exec(xml))){const label=clean(m[1]);if(/vend|represent|consult|atend|comercial/i.test(label)){const x=/<xTexto>([\s\S]*?)<\/xTexto>/i.exec(m[2]);if(x&&clean(x[1]))out.push({label,value:clean(x[1]),method:'obsCont'})}}
+ while((m=obs.exec(xml))){const label=clean(m[1]);if(/vend|represent|consult|atend|comercial/i.test(label)){const x=/<xTexto>([\s\S]*?)<\/xTexto>/i.exec(m[2]);if(x&&clean(x[1]))out.push({label,value:sellerName(x[1]),method:'obsCont'})}}
  const generic=/(?:vendedor|representante|consultor|atendente|comercial)\s*[:=\-]\s*([A-Za-zÀ-ÿ][A-Za-zÀ-ÿ .'-]{1,60})/gi;
- while((m=generic.exec(xml))){const value=clean(m[1]).split(/[;<]/)[0].trim();if(value)out.push({label:m[0].slice(0,m[0].indexOf(m[1])).replace(/[:=\-\s]+$/,''),value,method:'texto'})}
+ while((m=generic.exec(xml))){const value=sellerName(clean(m[1]).split(/[;<]/)[0]);if(value)out.push({label:m[0].slice(0,m[0].indexOf(m[1])).replace(/[:=\-\s]+$/,''),value,method:'texto'})}
  return out;
 }
 const orders=new Map();
