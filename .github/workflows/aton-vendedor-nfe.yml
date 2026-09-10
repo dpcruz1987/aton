@@ -2,11 +2,17 @@ name: Vendas por vendedor via XML da NF-e
 
 on:
   workflow_dispatch:
+  schedule:
+    - cron: "5 * * * *"
   push:
     branches: [main]
     paths:
       - "scripts/aton-seller-from-nfe.mjs"
       - ".github/workflows/aton-vendedor-nfe.yml"
+
+concurrency:
+  group: vendas-vendedor-aton
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -19,15 +25,19 @@ jobs:
       ATON_INNOVEX_TOKEN: ${{ secrets.ATON_INNOVEX_TOKEN }}
       ATON_INNOVEX_API_BASE: https://api.ambarxcall.com.br/AtonSNIsapi.dll/atonerp
       ATON_INNOVEX_INTEGRADOR: ATONAPI
-      DATA_INICIAL: "01/09/2026"
-      DATA_FINAL: "10/09/2026"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
-      - run: test -n "$ATON_INNOVEX_TOKEN"
-      - name: Extrair vendedor identificado no XML
+      - name: Validar secret
+        shell: bash
+        run: |
+          if [ -z "$ATON_INNOVEX_TOKEN" ]; then
+            echo "::error::Secret ATON_INNOVEX_TOKEN não configurado"
+            exit 1
+          fi
+      - name: Consultar e agregar vendas
         run: node scripts/aton-seller-from-nfe.mjs
       - uses: actions/upload-artifact@v4
         with:
